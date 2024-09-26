@@ -5,31 +5,31 @@ namespace Local;
 use Nether\Common;
 use Nether\Console;
 
-#[Console\Meta\Application('vidtool', '1.0.0-dev', Phar: 'vidtool.phar')]
+#[Console\Meta\Application('vidtool', '0.0.1', Phar: 'vidtool.phar')]
 class App
 extends Console\Client {
 
-	#[Console\Meta\Command('codec')]
+	#[Console\Meta\Command('check')]
 	#[Console\Meta\Arg('file/folder')]
+	#[Console\Meta\Toggle('ffprobe', 'Show the FFProbe data.')]
+	#[Console\Meta\Toggle('move', 'Move the files that fail into a Todo folder.')]
 	#[Console\Meta\Error(1, 'not found: %s')]
 	public function
-	HandleCheckCodecs():
+	HandleCheckVideoFiles():
 	int {
 
 		$What = realpath($this->GetInput(1) ?? '.');
-		$OptCodecMove = $this->GetOption('move');
-		$OptShowProbe = $this->GetOption('probe');
-		$OptMoveMode = 1;
+		$OptMoveMode = ((int)$this->GetOption('move')) ?: 0;
+		$OptShowProbe = $this->GetOption('ffprobe') ?? FALSE;
 
-		$GoodCodecs = new Common\Datastore([ 'HEVC' ]);
-		$GoodEncoders = new COmmon\Datastore([ 'HandBrake' ]);
+		$Codecs = new Common\Datastore([ 'HEVC' ]);
+		$Encoders = new COmmon\Datastore([ 'HandBrake' ]);
 		$CheckExts = new Common\Datastore([ 'mp4' ]);
 
 		$Files = NULL;
 		$File = NULL;
 		$Cmd = NULL;
 		$Row = NULL;
-		$Found = NULL;
 		$Report = new Common\Datastore;
 
 		////////
@@ -57,18 +57,40 @@ extends Console\Client {
 			return $Found->Count() > 0;
 		});
 
+		$Files->Sort();
+
 		// fetch file info.
 
-		$this->PrintStatus(sprintf(
-			'Checking codecs on %d %s',
-			$Files->Count(),
-			Common\Values::IfOneElse($Files->Count(), 'file', 'files')
-		));
+		$this->PrintFilesStart($Files);
+		$this->RunFilesProbe($Files, $Report);
+		$this->PrintFilesReport($Report, $Codecs, $Encoders, $OptShowProbe);
+
+		if($OptMoveMode > 0)
+		$this->MoveFilesTodo($Report, $OptMoveMode);
+
+		return 0;
+	}
+
+	////////////////////////////////////////////////////////////////
+	////////////////////////////////////////////////////////////////
+
+	protected function
+	RunFilesProbe(Common\Datastore $Files, Common\Datastore $Report):
+	void {
+
+		$File = NULL;
+
+		////////
 
 		foreach($Files as $File) {
 			$Cmd = Console\Struct\CommandLineUtil::Exec(sprintf(
 				'ffprobe %s 2>&1',
 				escapeshellarg($File)
+			));
+
+			$this->PrintLn(sprintf(
+				$this->Format('>> %s...', $this->Theme::Muted),
+				basename($File)
 			));
 
 			$Row = VideoInfo::FromFile($File);
@@ -78,20 +100,52 @@ extends Console\Client {
 			$Report->Shove($Row->GetFile(), $Row);
 		}
 
-		// print a report on all the files found.
+		$this->PrintLn('');
 
-		$Report->Each(function(VideoInfo $Row) use($GoodCodecs, $GoodEncoders, $OptShowProbe) {
+	}
 
-			$KeepCodec = $GoodCodecs->Distill(fn(string $E)=> $E === $Row->GetCodec());
-			$KeepEnc = $GoodEncoders->Distill(fn(string $E)=> str_starts_with($Row->GetEncoder(), $E));
+	protected function
+	PrintFilesStart(Common\Datastore $Files):
+	void {
 
-			if($KeepCodec->Count() === 0)
-			$Row->SetStatus($Row::StatusWrongCodec);
+		$this->PrintStatus(sprintf(
+			'Checking codecs on %d %s',
+			$Files->Count(),
+			Common\Values::IfOneElse($Files->Count(), 'file', 'files')
+		));
 
-			elseif($KeepEnc->Count() === 0)
-			$Row->SetStatus($Row::StatusWrongEncoder);
+		return;
+	}
+
+	protected function
+	PrintFilesReport(Common\Datastore $Report, Common\Datastore $Codecs, Common\Datastore $Encoders, bool $FFProbe):
+	void {
+
+		$Report->Each(function(VideoInfo $Row) use($Codecs, $Encoders, $FFProbe) {
+
+			$KeepCodec = $Codecs->Distill(
+				fn(string $E)
+				=> $E === $Row->GetCodec()
+			);
+
+			$KeepEnc = $Encoders->Distill(
+				fn(string $E)
+				=> str_starts_with($Row->GetEncoder(), $E)
+			);
 
 			////////
+
+			if($Codecs->Count())
+			if($KeepCodec->Count() === 0)
+			$Row->PushStatus($Row::StatusWrongCodec);
+
+			if($Encoders->Count())
+			if($KeepEnc->Count() === 0)
+			$Row->PushStatus($Row::StatusWrongEncoder);
+
+			////////
+
+			$MsgFile = $Row->GetFileBasename();
 
 			$MsgCodec = match(TRUE) {
 				(!$Row->IsCodecGood())
@@ -104,54 +158,121 @@ extends Console\Client {
 				=> $this->Format($Row->GetCodec(), $this->Theme::OK)
 			};
 
+			$MsgEncoder = match(TRUE) {
+				(!$Row->IsEncoderGood())
+				=> $this->Format($Row->GetEncoder(), $this->Theme::Warning),
+
+				default
+				=> $this->Format($Row->GetEncoder(), $this->Theme::Muted)
+			};
+
+			$MsgFFProbe = $this->Format($Row->GetFFProbe(), $this->Theme::Muted);
+
+			////////
+
 			$this->PrintLn(sprintf(
 				'[%s] %s (%s)',
-				$MsgCodec,
-				$Row->GetFileBasename(),
-				$Row->GetEncoder()
+				$MsgCodec, $MsgFile, $MsgEncoder
 			));
 
-			if($OptShowProbe)
-			$this->PrintLn($Row->GetFFProbe(), 2);
+			////////
+
+			if($FFProbe)
+			$this->PrintLn($MsgFFProbe, 2);
 
 			return;
 		});
 
-		if($OptCodecMove) {
-			$Report->Each(function(VideoInfo $Row) use($GoodCodecs, $OptMoveMode) {
+		return;
+	}
 
-				if($Row->GetStatus() === $Row::StatusOK)
-				return;
+	protected function
+	MoveFilesTodo(Common\Datastore $Report, int $MoveMode=0):
+	void {
 
-				////////
+		$Report->Each(function(VideoInfo $Row) use($MoveMode) {
 
-				$Folder = 'Todo';
+			if($Row->GetStatus() === $Row::StatusOK)
+			return;
 
-				if($OptMoveMode === 2)
-				$Folder = $Row->GetCodec();
+			if($MoveMode === 0)
+			return;
 
-				if($OptMoveMode === 3)
-				$Folder = $Row->GetEncoder();
+			////////
 
-				////////
+			$Folder = 'Todo';
 
-				$File = Common\Filesystem\Util::Pathify(
-					$Row->GetFileDirname(),
-					$Folder,
-					$Row->GetFileBasename()
-				);
+			if($MoveMode === 2)
+			$Folder = $Row->GetCodec();
 
-				$Dir = dirname($File);
-				Common\Filesystem\Util::MkDir($Dir);
+			if($MoveMode === 3)
+			$Folder = $Row->GetEncoder();
 
-				rename($Row->GetFile(), $File);
-				$Row->SetFile($File);
+			////////
 
-				return;
-			});
-		}
+			$File = Common\Filesystem\Util::Pathify(
+				$Row->GetFileDirname(),
+				$Folder,
+				$Row->GetFileBasename()
+			);
 
-		return 0;
+			$Dir = dirname($File);
+			Common\Filesystem\Util::MkDir($Dir);
+
+			rename($Row->GetFile(), $File);
+			$Row->SetFile($File);
+
+			return;
+		});
+
+		return;
+	}
+
+	////////////////////////////////////////////////////////////////
+	////////////////////////////////////////////////////////////////
+
+	protected function
+	GetPharFiles():
+	Common\Datastore {
+
+		$Index = parent::GetPharFiles();
+		$Index->Push('core');
+
+		return $Index;
+	}
+
+	protected function
+	GetPharFileFilters():
+	Common\Datastore {
+
+		$Filters = parent::GetPharFileFilters();
+
+		$Filters->Push(function(string $File) {
+
+			$DS = DIRECTORY_SEPARATOR;
+
+			// dev deps that dont need to be.
+
+			if(str_contains($File, "squizlabs{$DS}"))
+			return FALSE;
+
+			if(str_contains($File, "dealerdirect{$DS}"))
+			return FALSE;
+
+			if(str_contains($File, "netherphp{$DS}standards"))
+			return FALSE;
+
+			// unused deps from Nether\Common that dont need to be.
+
+			if(str_contains($File, "monolog{$DS}"))
+			return FALSE;
+
+			////////
+
+			return TRUE;
+		});
+
+		return $Filters;
 	}
 
 };

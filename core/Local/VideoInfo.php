@@ -88,8 +88,6 @@ class VideoInfo {
 	IsCodecGood():
 	bool {
 
-//		var_dump((($this->Status & static::StatusWrongCodec) === 0));
-
 		return (($this->Status & static::StatusWrongCodec) === 0);
 	}
 
@@ -152,8 +150,24 @@ class VideoInfo {
 	SetStatus(int $Status):
 	static {
 
-		if(($this->Status & $Status) === 0)
 		$this->Status = $Status;
+
+		return $this;
+	}
+
+	public function
+	PushStatus(int $Status):
+	static {
+
+		$Has = $this->Status & $Status;
+		$Rem = $Status & ~$Has;
+
+		////////
+
+		if($Rem !== 0)
+		$this->Status |= $Rem;
+
+		////////
 
 		return $this;
 	}
@@ -195,12 +209,12 @@ class VideoInfo {
 	DigestFFProbe_Encoder(Common\Datastore $Lines):
 	void {
 
-		$Lines = $Lines->Distill(fn(string $L)=> str_contains($L, 'encoder'));
+		$Encoders = $Lines->Distill(fn(string $L)=> str_contains($L, 'encoder'));
 		$Found = NULL;
 
 		////////
 
-		if(preg_match('/encoder[\h]*: (.+?)$/', $Lines->Current(), $Found))
+		if(preg_match('/encoder[\h]*: (.+?)$/', $Encoders->Current(), $Found))
 		$this->SetEncoder($Found[1]);
 
 		return;

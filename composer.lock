@@ -287,12 +287,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/netherphp/console.git",
-                "reference": "d704eb3c51fa5c8f1e1ba320b3ece38c03290adb"
+                "reference": "d2d8d1801d5973a0e4644143a2e731457eaa01c8"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/netherphp/console/zipball/d704eb3c51fa5c8f1e1ba320b3ece38c03290adb",
-                "reference": "d704eb3c51fa5c8f1e1ba320b3ece38c03290adb",
+                "url": "https://api.github.com/repos/netherphp/console/zipball/d2d8d1801d5973a0e4644143a2e731457eaa01c8",
+                "reference": "d2d8d1801d5973a0e4644143a2e731457eaa01c8",
                 "shasum": ""
             },
             "require": {
@@ -338,7 +338,7 @@
                 "issues": "https://github.com/netherphp/console/issues",
                 "source": "https://github.com/netherphp/console/tree/redux"
             },
-            "time": "2024-07-10T20:30:53+00:00"
+            "time": "2024-09-26T20:19:42+00:00"
         },
         {
             "name": "netherphp/dye",
