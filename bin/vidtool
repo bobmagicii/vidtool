@@ -1,0 +1,30 @@
+#!env php
+<?php ##########################################################################
+################################################################################
+
+list($AppRoot, $BootRoot, $BDS) = (function(): array {
+
+	$PF = Phar::Running(FALSE);
+	$PU = Phar::Running(TRUE);
+	$DS = DIRECTORY_SEPARATOR;
+
+	return match(TRUE) {
+		($PF !== '')
+		=> [ dirname($PF), $PU, '/' ],
+
+		default
+		=> [ dirname(__FILE__, 2), dirname(__FILE__, 2), $DS ]
+	};
+
+})();
+
+require(join($BDS, [ $BootRoot, 'vendor', 'autoload.php' ]));
+
+################################################################################
+################################################################################
+
+exit(Local\App::Realboot([
+	'AppRoot'  => $AppRoot,
+	'BootRoot' => $BootRoot,
+	'BDS'      => $BDS
+]));

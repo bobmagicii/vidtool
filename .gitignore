@@ -1,0 +1,12 @@
+# typical project wide annoyances.
+
+/.phpunit.cache
+/.vendex
+/env.lock
+/backups
+/build
+/logs
+/temp
+/vendor
+
+# eof
