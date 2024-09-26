@@ -4,6 +4,10 @@ Help me find videos that need to be re-encoded. Some things are still hard coded
 
 The default behaviour is to print a report about the video files it found.
 
+# Requirements
+
+* PHP 8.2+
+
 # Checks Performed:
 
 > File Type: mp4
