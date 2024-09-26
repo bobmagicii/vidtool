@@ -24,6 +24,9 @@ class VideoInfo {
 	$Encoder = 'unknown';
 
 	protected int
+	$Filesize = 0;
+
+	protected int
 	$Status = self::StatusOK;
 
 	protected int
@@ -57,10 +60,48 @@ class VideoInfo {
 	}
 
 	public function
+	GetFilesize():
+	int {
+
+		return $this->Filesize;
+	}
+
+	public function
+	GetFilesizeClean():
+	string {
+
+		return Common\Units\Bytes::FromInt($this->Filesize)->Get();
+	}
+
+	public function
 	GetEncoder():
 	string {
 
 		return $this->Encoder;
+	}
+
+	public function
+	GetEncoderClean():
+	string {
+
+		$Words = Common\Datastore::FromString($this->Encoder, ' ');
+		$Name = '';
+
+		// if there was only one word then return it.
+
+		if($Words->Count() === 1)
+		return $this->Encoder;
+
+		// otherwise drop words that looked like version crap.
+
+		foreach($Words as $Word) {
+			if(preg_match('/[0-9\.]/', $Word))
+			continue;
+
+			$Name .= "{$Word} ";
+		}
+
+		return trim($Name);
 	}
 
 	public function
@@ -84,11 +125,49 @@ class VideoInfo {
 		return $this->Status;
 	}
 
+	////////////////////////////////
+
+	public function
+	IsCodec(string $Codec):
+	bool {
+
+		return (strtolower($this->GetCodec()) === strtolower($Codec));
+	}
+
+	public function
+	IsCodecLike(string $Codec):
+	bool {
+
+		return str_starts_with(
+			strtolower($this->GetCodec()),
+			strtolower($Codec)
+		);
+	}
+
 	public function
 	IsCodecGood():
 	bool {
 
 		return (($this->Status & static::StatusWrongCodec) === 0);
+	}
+
+	////////////////////////////////
+
+	public function
+	IsEncoder(string $Encoder):
+	bool {
+
+		return (strtolower($this->GetEncoder()) === strtolower($Encoder));
+	}
+
+	public function
+	IsEncoderLike(string $Encoder):
+	bool {
+
+		return str_starts_with(
+			strtolower($this->GetEncoder()),
+			strtolower($Encoder)
+		);
 	}
 
 	public function
@@ -115,6 +194,8 @@ class VideoInfo {
 	static {
 
 		$this->File = $Path;
+
+		$this->Filesize = filesize($this->File);
 
 		return $this;
 	}

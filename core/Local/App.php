@@ -18,38 +18,74 @@ extends Console\Client {
 	HandleCheckVideoFiles():
 	int {
 
-		$What = realpath($this->GetInput(1) ?? '.');
-		$OptMoveMode = ((int)$this->GetOption('move')) ?: 0;
-		$OptShowProbe = $this->GetOption('ffprobe') ?? FALSE;
+		$What = $this->GetInput(1) ?? '.';
+		$OptMove = ((int)$this->GetOption('move')) ?: 0;
+		$OptFFProbe = $this->GetOption('ffprobe') ?? FALSE;
 
-		$Codecs = new Common\Datastore([ 'HEVC' ]);
-		$Encoders = new COmmon\Datastore([ 'HandBrake' ]);
+		// @todo 2024-09-26 pull --codecs else config file
+
+		$Codecs = new Common\Datastore([ 'hevc' ]);
+		$Encoders = new Common\Datastore([ 'handbrake' ]);
 		$CheckExts = new Common\Datastore([ 'mp4' ]);
 
+		$Path = NULL;
+		$Report = NULL;
 		$Files = NULL;
-		$File = NULL;
-		$Cmd = NULL;
-		$Row = NULL;
-		$Report = new Common\Datastore;
 
 		////////
 
-		if(!file_exists($What))
+		$Path = realpath($What);
+
+		if(!$Path)
 		$this->Quit(1, $What);
 
 		////////
 
-		// handle file or directory scan.
+		$Report = new Common\Datastore;
+		$Files = $this->FetchFileList($Path, $CheckExts);
 
-		if(is_dir($What))
-		$Files = Common\Filesystem\Indexer::DatastoreFromPath(realpath($What));
-		else
-		$Files = Common\Datastore::FromArray([ realpath($What) ]);
+		$this->PrintFilesReportBegin($Files);
+		$this->RunFilesProbe($Files, $Report);
+		$this->PrintFilesReportEnd($Report, $Codecs, $Encoders, $OptFFProbe);
+
+		if($OptMove > 0)
+		$this->MoveFilesTodo($Report, $OptMove);
+
+		return 0;
+	}
+
+	////////////////////////////////////////////////////////////////
+	////////////////////////////////////////////////////////////////
+
+	protected function
+	FetchFileList(string $What, Common\Datastore $Exts):
+	Common\Datastore {
+
+		$Files = NULL;
+
+		////////
+
+		// given the path to a directory index all the files within it.
+		// otherwise make an index with just this file.
+
+		$Files = match(TRUE) {
+			(is_dir($What))
+			=> Common\Filesystem\Indexer::DatastoreFromPath(realpath($What)),
+
+			(file_exists($What))
+			=> Common\Datastore::FromArray([ realpath($What) ]),
+
+			default
+			=> NULL
+		};
+
+		if(!$Files)
+		throw new Common\Error\RequiredDataMissing('Files', 'array<string>');
 
 		// filter out files by ext type.
 
-		$Files->Filter(function(string $F) use($CheckExts) {
-			$Found = $CheckExts->Distill(
+		$Files->Filter(function(string $F) use($Exts) {
+			$Found = $Exts->Distill(
 				fn(string $Ext)
 				=> str_ends_with(strtolower($F), strtolower($Ext))
 			);
@@ -59,20 +95,8 @@ extends Console\Client {
 
 		$Files->Sort();
 
-		// fetch file info.
-
-		$this->PrintFilesStart($Files);
-		$this->RunFilesProbe($Files, $Report);
-		$this->PrintFilesReport($Report, $Codecs, $Encoders, $OptShowProbe);
-
-		if($OptMoveMode > 0)
-		$this->MoveFilesTodo($Report, $OptMoveMode);
-
-		return 0;
+		return $Files;
 	}
-
-	////////////////////////////////////////////////////////////////
-	////////////////////////////////////////////////////////////////
 
 	protected function
 	RunFilesProbe(Common\Datastore $Files, Common\Datastore $Report):
@@ -89,7 +113,7 @@ extends Console\Client {
 			));
 
 			$this->PrintLn(sprintf(
-				$this->Format('>> %s...', $this->Theme::Muted),
+				$this->Format('* %s...', $this->Theme::Muted),
 				basename($File)
 			));
 
@@ -105,7 +129,7 @@ extends Console\Client {
 	}
 
 	protected function
-	PrintFilesStart(Common\Datastore $Files):
+	PrintFilesReportBegin(Common\Datastore $Files):
 	void {
 
 		$this->PrintStatus(sprintf(
@@ -118,22 +142,13 @@ extends Console\Client {
 	}
 
 	protected function
-	PrintFilesReport(Common\Datastore $Report, Common\Datastore $Codecs, Common\Datastore $Encoders, bool $FFProbe):
+	PrintFilesReportEnd(Common\Datastore $Report, Common\Datastore $Codecs, Common\Datastore $Encoders, bool $FFProbe):
 	void {
 
 		$Report->Each(function(VideoInfo $Row) use($Codecs, $Encoders, $FFProbe) {
 
-			$KeepCodec = $Codecs->Distill(
-				fn(string $E)
-				=> $E === $Row->GetCodec()
-			);
-
-			$KeepEnc = $Encoders->Distill(
-				fn(string $E)
-				=> str_starts_with($Row->GetEncoder(), $E)
-			);
-
-			////////
+			$KeepCodec = $Codecs->Distill(fn(string $C)=> $Row->IsCodec($C));
+			$KeepEnc = $Encoders->Distill(fn(string $E)=> $Row->IsEncoderLike($E));
 
 			if($Codecs->Count())
 			if($KeepCodec->Count() === 0)
@@ -151,37 +166,36 @@ extends Console\Client {
 				(!$Row->IsCodecGood())
 				=> $this->Format($Row->GetCodec(), $this->Theme::Error),
 
-				(!$Row->IsEncoderGood())
-				=> $this->Format($Row->GetCodec(), $this->Theme::Warning),
-
 				default
 				=> $this->Format($Row->GetCodec(), $this->Theme::OK)
 			};
 
 			$MsgEncoder = match(TRUE) {
 				(!$Row->IsEncoderGood())
-				=> $this->Format($Row->GetEncoder(), $this->Theme::Warning),
+				=> $this->Format($Row->GetEncoderClean(), $this->Theme::Warning),
 
 				default
-				=> $this->Format($Row->GetEncoder(), $this->Theme::Muted)
+				=> $this->Format($Row->GetEncoderClean(), $this->Theme::OK)
 			};
 
 			$MsgFFProbe = $this->Format($Row->GetFFProbe(), $this->Theme::Muted);
 
+			$MsgFilesize = $Row->GetFilesizeClean();
+
 			////////
 
 			$this->PrintLn(sprintf(
-				'[%s] %s (%s)',
-				$MsgCodec, $MsgFile, $MsgEncoder
+				'%s [%s, %s] [%s]',
+				$MsgFile, $MsgCodec, $MsgEncoder, $MsgFilesize
 			));
-
-			////////
 
 			if($FFProbe)
 			$this->PrintLn($MsgFFProbe, 2);
 
 			return;
 		});
+
+		$this->PrintLn();
 
 		return;
 	}
@@ -218,6 +232,14 @@ extends Console\Client {
 
 			$Dir = dirname($File);
 			Common\Filesystem\Util::MkDir($Dir);
+
+			$this->PrintLn(sprintf(
+				'%s %s%s%s',
+				$this->Format('>>', $this->Theme::Warning),
+				$Folder,
+				$this->GetOption('BDS'),
+				$Row->GetFileBasename()
+			));
 
 			rename($Row->GetFile(), $File);
 			$Row->SetFile($File);
