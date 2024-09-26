@@ -4,9 +4,14 @@ Help me find videos that need to be re-encoded. Some things are still hard coded
 
 The default behaviour is to print a report about the video files it found.
 
+
+
 # Requirements
 
 * PHP 8.2+
+* ffmpeg/ffprobe installed on the system.
+
+
 
 # Checks Performed:
 
@@ -22,11 +27,17 @@ The default behaviour is to print a report about the video files it found.
 
   Demands videos had been encoded by HandBrake, as h265 with the same settings as HandBrake from Adobe built encoders end up being absolute ass. This results in encoding files in a much higher bitrate than should have been required to not have Adobe crush the hell out of my videos.
 
+
+
 # Usage
 
 > `$ php vidtool.phar check`
 
 Check the current directory for MP4 files.
+
+> `$ php vidtool.phar check --ffprobe`
+
+Include the dump of FFProbe data in the report.
 
 > `$ php vidtool.phar check <path>`
 
