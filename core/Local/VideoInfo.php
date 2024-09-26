@@ -27,6 +27,9 @@ class VideoInfo {
 	$Filesize = 0;
 
 	protected int
+	$Duration = 0;
+
+	protected int
 	$Status = self::StatusOK;
 
 	protected int
@@ -125,6 +128,18 @@ class VideoInfo {
 		return $this->Status;
 	}
 
+	public function
+	GetSizeRate():
+	float {
+
+		$Rate = $this->Filesize / $this->Duration;
+
+		$MBit = $Rate / pow(Common\Values::BitsPerUnit, 2);
+		$MBit = round($MBit, 3);
+
+		return $MBit;
+	}
+
 	////////////////////////////////
 
 	public function
@@ -181,15 +196,6 @@ class VideoInfo {
 	////////////////////////////////////////////////////////////////
 
 	public function
-	SetError(int $ErrNum):
-	static {
-
-		$this->Error = $ErrNum;
-
-		return $this;
-	}
-
-	public function
 	SetFile(string $Path):
 	static {
 
@@ -223,6 +229,30 @@ class VideoInfo {
 	static {
 
 		$this->Encoder = $Encoder;
+
+		return $this;
+	}
+
+	public function
+	SetDuration(int|string $Dur):
+	static {
+
+		if(is_string($Dur)) {
+			$Dur = strtotime("1970-01-01 {$Dur}");
+		}
+
+		$this->Duration = $Dur;
+
+		return $this;
+	}
+
+	////////////////////////////////
+
+	public function
+	SetError(int $ErrNum):
+	static {
+
+		$this->Error = $ErrNum;
 
 		return $this;
 	}
@@ -266,7 +296,8 @@ class VideoInfo {
 
 		$Lines = Common\Datastore::FromString($this->FFProbe, PHP_EOL);
 		$this->DigestFFProbe_VideoStreamCodec($Lines);
-		$this->DigestFFProbe_Encoder($Lines);
+		$this->DigestFFProbe_VideoEncoder($Lines);
+		$this->DigestFFProbe_VideoDuration($Lines);
 
 		return $this;
 	}
@@ -287,7 +318,22 @@ class VideoInfo {
 	}
 
 	protected function
-	DigestFFProbe_Encoder(Common\Datastore $Lines):
+	DigestFFProbe_VideoDuration(Common\Datastore $Lines):
+	void {
+
+		$Durrs = $Lines->Distill(fn(string $L)=> str_contains($L, 'Duration'));
+		$Found = NULL;
+
+		////////
+
+		if(preg_match('/Duration: (.+?),/', $Durrs->Current(), $Found))
+		$this->SetDuration($Found[1]);
+
+		return;
+	}
+
+	protected function
+	DigestFFProbe_VideoEncoder(Common\Datastore $Lines):
 	void {
 
 		$Encoders = $Lines->Distill(fn(string $L)=> str_contains($L, 'encoder'));

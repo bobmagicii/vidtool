@@ -180,13 +180,24 @@ extends Console\Client {
 
 			$MsgFFProbe = $this->Format($Row->GetFFProbe(), $this->Theme::Muted);
 
-			$MsgFilesize = $Row->GetFilesizeClean();
+			$MsgFilesize = sprintf(
+				'%s, %s MiB/s',
+				$Row->GetFilesizeClean(),
+				$Row->GetSizeRate()
+			);
+
+			if($Row->GetSizeRate() > 1.0)
+			$MsgFilesize = $this->Format($MsgFilesize, $this->Theme::Warning);
+			else
+			$MsgFilesize = $this->Format($MsgFilesize, $this->Theme::OK);
 
 			////////
 
 			$this->PrintLn(sprintf(
 				'%s [%s, %s] [%s]',
-				$MsgFile, $MsgCodec, $MsgEncoder, $MsgFilesize
+				$MsgFile,
+				$MsgCodec, $MsgEncoder,
+				$MsgFilesize
 			));
 
 			if($FFProbe)
