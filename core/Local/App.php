@@ -31,6 +31,7 @@ extends Console\Client {
 		$Path = NULL;
 		$Report = NULL;
 		$Files = NULL;
+		$HadAnyFailures = FALSE;
 
 		////////
 
@@ -47,6 +48,14 @@ extends Console\Client {
 		$this->PrintFilesReportBegin($Files);
 		$this->RunFilesProbe($Files, $Report);
 		$this->PrintFilesReportEnd($Report, $Codecs, $Encoders, $OptFFProbe);
+
+		$HadAnyFailures = (
+			$Report->Distill(fn(VideoInfo $V)=> $V->GetStatus() !== 0)->Count() > 0
+		);
+
+		if($OptMove === 0 && $HadAnyFailures) {
+			$this->PrintStatus('Use --move to put files into a Todo folder.');
+		}
 
 		if($OptMove > 0)
 		$this->MoveFilesTodo($Report, $OptMove);
