@@ -132,6 +132,9 @@ class VideoInfo {
 	GetSizeRate():
 	float {
 
+		if(!$this->Duration)
+		return $this->Filesize;
+
 		$Rate = $this->Filesize / $this->Duration;
 
 		$MBit = $Rate / pow(Common\Values::BitsPerUnit, 2);

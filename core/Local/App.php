@@ -11,8 +11,9 @@ extends Console\Client {
 
 	#[Console\Meta\Command('check')]
 	#[Console\Meta\Arg('file/folder')]
-	#[Console\Meta\Toggle('ffprobe', 'Show the FFProbe data.')]
-	#[Console\Meta\Toggle('move', 'Move the files that fail into a Todo folder.')]
+	#[Console\Meta\Toggle('--ffprobe', 'Show the FFProbe data.')]
+	#[Console\Meta\Toggle('--move', 'Move the files that fail into a Todo folder.')]
+	#[Console\Meta\Value('--limit', 'When used with --move, limits how many files are moved, for batching.')]
 	#[Console\Meta\Error(1, 'not found: %s')]
 	public function
 	HandleCheckVideoFiles():
@@ -20,6 +21,7 @@ extends Console\Client {
 
 		$What = $this->GetInput(1) ?? '.';
 		$OptMove = ((int)$this->GetOption('move')) ?: 0;
+		$OptLimit = ((int)$this->GetOption('limit')) ?: 0;
 		$OptFFProbe = $this->GetOption('ffprobe') ?? FALSE;
 
 		// @todo 2024-09-26 pull --codecs else config file
@@ -58,7 +60,7 @@ extends Console\Client {
 		}
 
 		if($OptMove > 0)
-		$this->MoveFilesTodo($Report, $OptMove);
+		$this->MoveFilesTodo($Report, $OptMove, $OptLimit);
 
 		return 0;
 	}
@@ -221,10 +223,13 @@ extends Console\Client {
 	}
 
 	protected function
-	MoveFilesTodo(Common\Datastore $Report, int $MoveMode=0):
+	MoveFilesTodo(Common\Datastore $Report, int $MoveMode=0, int $MoveLimit=0):
 	void {
 
-		$Report->Each(function(VideoInfo $Row) use($MoveMode) {
+		$Moved = 0;
+		$Folder = 'Todo';
+
+		$Report->Each(function(VideoInfo $Row) use($MoveMode, $MoveLimit, &$Moved, &$Folder) {
 
 			if($Row->GetStatus() === $Row::StatusOK)
 			return;
@@ -232,9 +237,10 @@ extends Console\Client {
 			if($MoveMode === 0)
 			return;
 
-			////////
+			if($MoveLimit > 0 && ($Moved >= $MoveLimit))
+			return;
 
-			$Folder = 'Todo';
+			////////
 
 			if($MoveMode === 2)
 			$Folder = $Row->GetCodec();
@@ -263,9 +269,19 @@ extends Console\Client {
 
 			rename($Row->GetFile(), $File);
 			$Row->SetFile($File);
+			$Moved += 1;
 
 			return;
 		});
+
+		if($Moved > 0) {
+			$this->PrintLn();
+			$this->PrintLn(sprintf(
+				$this->Format('Moved %d files into %s.', $this->Theme::Warning),
+				$Moved,
+				$Folder
+			));
+		}
 
 		return;
 	}

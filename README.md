@@ -47,6 +47,10 @@ Check a specific file or directory.
 
 Move the files that fail the checks into a `Todo` folder that can then be drag dropped onto HandBrake later.
 
+> `$ php vidtool.phar check <path> --move --limit=25`
+
+Only move the first 25 files that fail the tests into the `Todo` folder. Still scans the entire directory though.
+
 > `$ php bin\vidtool phar`
 
 From the source directory, this will build a Phar file placed within the `build` directory. This footnote was placed here as passive aggressive bullying of AcmePHP since they stopped shipping Phars, stopped updating the main website, and refuse to post Phar building instructions on the Github repo readme file. All this poor behaviour began when ZeroSSL took the project over.
